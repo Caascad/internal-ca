@@ -1,0 +1,367 @@
+#!/usr/bin/env bash
+
+set -eo pipefail
+
+usage() {
+  echo "Usage: $0 COMMAND ENVIRONMENT" 1>&2
+  exit 1
+}
+
+help() {
+echo "
+NAME
+      internal-ca - generate CA certificates for kubernetes internal usages
+
+SYNPOSIS
+      internal-ca generate [OPTIONS] ENVIRONMENT
+      internal-ca renew [OPTIONS] ENVIRONMENT
+      internal-ca publish [OPTIONS] ENVIRONMENT
+
+DESCRIPTION
+      Script to generate (and renew) internal certifcate used inside
+      kubernetes. The certifcate and secret definition is store in a gopass store
+      but not automatically deploy into kubernetes.
+
+      generate
+
+            Generate certifcate ca.pem & intermediate-ca.pem
+            then generate secret ca-certs description for kubernetes (ca-certs.yaml)
+
+      renew
+
+            Renew Already generate cert
+
+      publish
+
+            Move pem files and ca-certs.yaml in the gopass store
+            Then add and commit others files generated ()
+
+      -s, --store STORE_NAME
+
+            Name of the gopass store used to store certifcate. (Default: caascad)
+
+            The gopass store must be initialized and mounted.
+
+      -d, --directory STORE_DIRECTORY
+
+            Folder name used in gopass store to save generated certifcate. (Default: internal-ca)
+            Generated files will be stored in \$STORE_NAME/\$STORE_DIRECTORY/\$ENVIRONMENT
+
+      -n, --namespace NAMESPACE
+
+            Namespace used in Kubernetes to store certificate. (Default: cert-manager)
+
+      ENVIRONMENT
+
+            Name of the target environment (aka Kubernetes cluster)
+"
+}
+
+#
+# Generate certifcate ca.pem & intermediate-ca.pem
+# then generate secret ca-certs description for kubernetes (ca-certs.yaml)
+#
+generate() {
+  mkdir -p "$DEST"
+
+  if [ ! -f "$DEST/ca.pem" ]; then
+    _tmpl_ca_json \
+    | cfssl gencert -initca - \
+    | cfssljson -bare "$DEST/ca"
+  fi
+
+  if [ ! -f "$DEST/intermediate-ca.pem" ]; then
+    _tmpl_intermediate_ca_json \
+    | cfssl gencert -initca - \
+    | cfssljson -bare "$DEST/intermediate-ca"
+
+    _tmpl_cfssl_json > "$DEST/cfssl.json"
+    cfssl sign  -ca "$DEST/ca.pem" \
+                -ca-key "$DEST/ca-key.pem" \
+                -config "$DEST/cfssl.json" \
+                -profile=intermediate_ca \
+                "$DEST/intermediate-ca.csr" \
+    | cfssljson -bare "$DEST/intermediate-ca"
+  fi
+
+  _kubectl_create_ca_cert
+}
+
+_kubectl_create_ca_cert() {
+  cat "$DEST/intermediate-ca.pem" "$DEST/ca.pem" > "$DEST/_tls.crt"
+
+  kubectl create secret generic \
+    --from-file=tls.crt="$DEST/_tls.crt" \
+    --from-file=tls.key="$DEST/intermediate-ca-key.pem" \
+    ca-certs \
+    --namespace "$NAMESPACE" \
+    --dry-run \
+    -o yaml \
+  > "$DEST/ca-certs.yaml"
+
+  rm "$DEST/_tls.crt"
+}
+
+#
+# Move pem files and ca-certs.yaml int he #gopass store
+# Then add and commit others files generated ()
+#
+publish() {
+  if [ ! -d "$DEST" ]; then
+    echo "Env $ENVIRONMENT not found"
+    exit 1
+  fi
+
+
+  for _file in $PEMLIST; do
+    if [ ! -f "$DEST/$_file" ]; then
+      echo "Missing $DEST/$_file in env"
+      exit 1
+    fi
+  done
+
+  for _file in $PEMLIST; do
+    gopass binary mv "$DEST/$_file" "$STORE_DIR/$ENVIRONMENT/$_file"
+  done
+
+  git -C "$GITSTORE" add "$DEST"
+  git -C "$GITSTORE" status
+  read -p "Do you want to continue? [y/N]" -r
+  if [[ ! $REPLY =~ ^[Yy]$ ]]
+  then
+      echo "no - exit"
+      exit 1
+  fi
+
+  git -C "$GITSTORE" commit -m "Add internal-ca csr for $ENVIRONMENT"
+  git -C "$GITSTORE" push
+}
+
+_unseal() {
+  for _file in $PEMLIST; do
+    if [ -f "$DEST/${_file}.b64.gpg" ]; then
+      gopass binary cat "$STORE_DIR/$ENVIRONMENT/${_file}.b64" \
+      > "$DEST/${_file}"
+    fi
+  done
+}
+
+#
+# Renew Already generate cert
+#
+renew() {
+  _unseal
+
+  if [ ! -f "$DEST/intermediate-ca-key.pem" ]; then
+    echo "Missing intermediate-ca-key.pem in $DEST"
+    exit 1
+  fi
+
+  cfssl gencsr -key "$DEST/intermediate-ca-key.pem" \
+               -cert "$DEST/intermediate-ca.pem" \
+  | jq .csr -r \
+  > "$DEST/intermediate-ca.csr"
+
+  _tmpl_cfssl_json > "$DEST/cfssl.json"
+  cfssl sign -ca "$DEST/ca.pem" \
+             -ca-key "$DEST/ca-key.pem" \
+             -config "$DEST/cfssl.json" \
+             -profile=intermediate_ca \
+             "$DEST/intermediate-ca.csr" \
+  | cfssljson -bare "$DEST/intermediate-ca"
+
+  _kubectl_create_ca_cert
+}
+
+_tmpl_ca_json() {
+  cat << EOF
+{
+  "CN": "Caascad CA",
+  "key": {
+    "algo": "rsa",
+    "size": 4096
+  },
+  "names": [
+    {
+      "C": "FR",
+      "L": "Paris",
+      "O": "Orange",
+      "OU": "Caascad"
+    }
+  ],
+  "ca": {
+    "expiry": "127200h"
+  }
+}
+EOF
+}
+
+_tmpl_cfssl_json() {
+  cat << EOF
+{
+  "signing": {
+    "default": {
+      "expiry": "8760h"
+    },
+    "profiles": {
+      "intermediate_ca": {
+        "usages": [
+            "signing",
+            "digital signature",
+            "key encipherment",
+            "cert sign",
+            "crl sign",
+            "server auth",
+            "client auth"
+        ],
+        "expiry": "127200h",
+        "ca_constraint": {
+            "is_ca": true,
+            "max_path_len": 0,
+            "max_path_len_zero": true
+        }
+      },
+      "peer": {
+        "usages": [
+            "signing",
+            "digital signature",
+            "key encipherment",
+            "client auth",
+            "server auth"
+        ],
+        "expiry": "8760h"
+      },
+      "server": {
+        "usages": [
+          "signing",
+          "digital signing",
+          "key encipherment",
+          "server auth"
+        ],
+        "expiry": "8760h"
+      },
+      "client": {
+        "usages": [
+          "signing",
+          "digital signature",
+          "key encipherment",
+          "client auth"
+        ],
+        "expiry": "8760h"
+      }
+    }
+  }
+}
+EOF
+}
+
+_tmpl_intermediate_ca_json() {
+  cat << EOF
+{
+  "CN": "Caascad Intermediate CA",
+  "key": {
+    "algo": "rsa",
+    "size": 4096
+  },
+  "names": [
+    {
+      "C":  "FR",
+      "L":  "Paris",
+      "O":  "Orange",
+      "OU": "Caascad"
+    }
+  ]
+}
+EOF
+}
+
+_tmpl_ca-issuer_yaml() {
+  cat << EOF
+apiVersion: cert-manager.io/v1alpha2
+kind: ClusterIssuer
+metadata:
+  name: ca-issuer
+  namespace: cert-manager
+spec:
+  ca:
+    secretName: ca-certs
+EOF
+}
+
+_parsing() {
+
+  COMMAND="$1"
+
+  case ${COMMAND} in
+    generate | renew | publish | help )
+    ;;
+    * )
+    echo "== Unkown command $COMMAND =="
+    help;
+    exit 1;;
+  esac
+
+  shift
+
+  # parameters parsing
+  while [[ $# -gt 1 ]]; do
+    par=$1 ;
+
+    case $par in
+      -s | --store )
+        shift;
+        STORE_NAME=$1
+        ;;
+      -d | --directory )
+        shift;
+        STORE_DIRECTORY=$1
+        ;;
+      -n | --namespace )
+        shift;
+        NAMESPACE=$1
+        ;;
+      -h | --help )
+        help
+        exit 0
+        ;;
+      *)
+        echo "== Unkown parameter $1 =="
+        help
+        exit 1
+        ;;
+    esac
+    shift;
+  done
+  ENVIRONMENT=$1
+
+  if  [ -z "$ENVIRONMENT" ]; then
+    echo "== Missing ENVIRONMENT parameter =="
+    help
+    exit 1
+  fi
+
+  if  [ -z "$STORE_NAME" ]; then STORE_NAME="caascad"; fi
+  if  [ -z "$NAMESPACE" ]; then NAMESPACE="cert-manager"; fi
+  if  [ -z "$STORE_DIRECTORY" ]; then STORE_DIRECTORY="internal-ca"; fi
+}
+
+_parsing  "$@"
+
+#
+# Check if #gopass store was mount
+# We use the pass directory to commit some files not managed by gopass
+GITSTORE=$(gopass config | sed -En '/^mount.*'"'$STORE_NAME'"'/,+1 s,^.*file://(.*)$,\1, p')
+
+if [ -z "$GITSTORE" ]
+then
+  echo "#gopass store not found"
+  echo "You need to init gopass and mount $STORE_NAME store first"
+  exit 2
+fi
+
+readonly PEMLIST="ca-key.pem intermediate-ca-key.pem ca-certs.yaml"
+STORE_DIR="$STORE_NAME/$STORE_DIRECTORY"
+DEST="$GITSTORE/$STORE_DIRECTORY/$ENVIRONMENT"
+
+# Run Command
+$COMMAND
