@@ -2,11 +2,6 @@
 
 set -eo pipefail
 
-usage() {
-  echo "Usage: $0 COMMAND ENVIRONMENT" 1>&2
-  exit 1
-}
-
 help() {
 echo "
 NAME
