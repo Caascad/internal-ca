@@ -61,7 +61,7 @@ DESCRIPTION
 CA_CN="Caascad CA"
 CA_NAME='"C": "FR", "L": "Paris", "O":  "Orange", "OU": "Caascad"'
 CA_USAGES='"signing", "digital signature", "key encipherment", "cert sign", "crl sign", "server auth", "client auth"'
-CA_CONSTRAINT='"is_ca": true, "max_path_len": 0, max_path_len_zero": true'
+CA_CONSTRAINT='"is_ca": true, "max_path_len": 0, "max_path_len_zero": true'
 CA_KEY_ALGO="rsa"
 CA_KEY_SIZE="4096"
 CA_EXPIRY="127200h"
@@ -226,15 +226,15 @@ _tmpl_cfssl_json() {
         "ca_constraint": { $CA_CONSTRAINT }
       },
       "peer": {
-        "usages": [$SIGNING_USAGES, "client auth", "server auth"],
+        "usages": [ $SIGNING_USAGES, "client auth", "server auth"],
         "expiry": "$SIGNING_EXPIRY"
       },
       "server": {
-        "usages": [$SIGNING_USAGES, "server auth"],
+        "usages": [ $SIGNING_USAGES, "server auth"],
         "expiry": "$SIGNING_EXPIRY"
       },
       "client": {
-        "usages": [$SIGNING_USAGES, "client auth"],
+        "usages": [ $SIGNING_USAGES, "client auth"],
         "expiry": "$SIGNING_EXPIRY"
       }
     }

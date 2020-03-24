@@ -62,7 +62,7 @@ teardown() {
   gopass_unmount_alice_store $TESTSTORE
 
   echo "== rm -r $TMPDIR =="
-  read -p "== Do you want to continue? [Y/n]" -r
+  read -p "== Do you want to continue? [y/N]" -r
   if [[ $REPLY =~ ^[Yy]$ ]]
   then
     echo "== yes remove $TMPDIR =="
