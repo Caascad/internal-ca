@@ -57,6 +57,17 @@ DESCRIPTION
 "
 }
 
+## CONST ##
+CA_CN="Caascad CA"
+CA_NAME='"C": "FR", "L": "Paris", "O":  "Orange", "OU": "Caascad"'
+CA_USAGES='"signing", "digital signature", "key encipherment", "cert sign", "crl sign", "server auth", "client auth"'
+CA_CONSTRAINT='"is_ca": true, "max_path_len": 0, max_path_len_zero": true'
+CA_KEY_ALGO="rsa"
+CA_KEY_SIZE="4096"
+CA_EXPIRY="127200h"
+SIGNING_USAGES='"signing", "digital signing", "key encipherment"'
+SIGNING_EXPIRY="8760h"
+
 #
 # Generate certifcate ca.pem & intermediate-ca.pem
 # then generate secret ca-certs description for kubernetes (ca-certs.yaml)
@@ -111,7 +122,6 @@ publish() {
     echo "Env $ENVIRONMENT not found"
     exit 1
   fi
-
 
   for _file in $PEMLIST; do
     if [ ! -f "$DEST/$_file" ]; then
@@ -176,22 +186,28 @@ renew() {
 _tmpl_ca_json() {
   cat << EOF
 {
-  "CN": "Caascad CA",
+  "CN": "$CA_CN",
   "key": {
-    "algo": "rsa",
-    "size": 4096
+    "algo": "$CA_KEY_ALGO",
+    "size": $CA_KEY_SIZE
   },
-  "names": [
-    {
-      "C": "FR",
-      "L": "Paris",
-      "O": "Orange",
-      "OU": "Caascad"
-    }
-  ],
+  "names": [{ $CA_NAME }],
   "ca": {
-    "expiry": "127200h"
+    "expiry": "$CA_EXPIRY"
   }
+}
+EOF
+}
+
+_tmpl_intermediate_ca_json() {
+  cat << EOF
+{
+  "CN": "Intermediate $CA_CN",
+  "key": {
+    "algo": "$CA_KEY_ALGO",
+    "size": $CA_KEY_SIZE
+  },
+  "names": [{ $CA_NAME }]
 }
 EOF
 }
@@ -201,76 +217,28 @@ _tmpl_cfssl_json() {
 {
   "signing": {
     "default": {
-      "expiry": "8760h"
+      "expiry": "$CA_EXPIRY"
     },
     "profiles": {
       "intermediate_ca": {
-        "usages": [
-            "signing",
-            "digital signature",
-            "key encipherment",
-            "cert sign",
-            "crl sign",
-            "server auth",
-            "client auth"
-        ],
-        "expiry": "127200h",
-        "ca_constraint": {
-            "is_ca": true,
-            "max_path_len": 0,
-            "max_path_len_zero": true
-        }
+        "usages": [ $CA_USAGES ],
+        "expiry": "$CA_EXPIRY",
+        "ca_constraint": { $CA_CONSTRAINT }
       },
       "peer": {
-        "usages": [
-            "signing",
-            "digital signature",
-            "key encipherment",
-            "client auth",
-            "server auth"
-        ],
-        "expiry": "8760h"
+        "usages": [$SIGNING_USAGES, "client auth", "server auth"],
+        "expiry": "$SIGNING_EXPIRY"
       },
       "server": {
-        "usages": [
-          "signing",
-          "digital signing",
-          "key encipherment",
-          "server auth"
-        ],
-        "expiry": "8760h"
+        "usages": [$SIGNING_USAGES, "server auth"],
+        "expiry": "$SIGNING_EXPIRY"
       },
       "client": {
-        "usages": [
-          "signing",
-          "digital signature",
-          "key encipherment",
-          "client auth"
-        ],
-        "expiry": "8760h"
+        "usages": [$SIGNING_USAGES, "client auth"],
+        "expiry": "$SIGNING_EXPIRY"
       }
     }
   }
-}
-EOF
-}
-
-_tmpl_intermediate_ca_json() {
-  cat << EOF
-{
-  "CN": "Caascad Intermediate CA",
-  "key": {
-    "algo": "rsa",
-    "size": 4096
-  },
-  "names": [
-    {
-      "C":  "FR",
-      "L":  "Paris",
-      "O":  "Orange",
-      "OU": "Caascad"
-    }
-  ]
 }
 EOF
 }
@@ -281,7 +249,7 @@ apiVersion: cert-manager.io/v1alpha2
 kind: ClusterIssuer
 metadata:
   name: ca-issuer
-  namespace: cert-manager
+  namespace: ${NAMESPACE}
 spec:
   ca:
     secretName: ca-certs
