@@ -313,11 +313,11 @@ _parsing  "$@"
 #
 # Check if #gopass store was mount
 # We use the pass directory to commit some files not managed by gopass
-GITSTORE=$(gopass config | sed -En '/^mount.*'"'$STORE_NAME'"'/,+1 s,^.*file://(.*)$,\1, p')
+GITSTORE=$(gopass config | sed -En $'/^mount.*\''$STORE_NAME$'\'/,/^mount/ s,^.*file://(.*)$,\\1, p')
 
 if [ -z "$GITSTORE" ]
 then
-  echo "#gopass store not found"
+  echo "gopass store '$STORE_NAME' not found"
   echo "You need to init gopass and mount $STORE_NAME store first"
   exit 2
 fi
