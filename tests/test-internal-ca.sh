@@ -52,7 +52,7 @@ setup() {
   # use internal-ca file, ignore PATH
   shopt -u sourcepath
   gopass_create_alice_key
-  gopass_mount_alice_store $TESTSTORE $TMPDIR/keystore
+  gopass_mount_alice_store $TESTSTORE $TMPDIR
 }
 
 
