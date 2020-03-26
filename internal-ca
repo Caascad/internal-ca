@@ -178,6 +178,35 @@ renew() {
   _kubectl_create_ca_cert
 }
 
+_git_check() {
+  echo "== Chech git repo is update $GITSTORE =="
+  # https://stackoverflow.com/a/3278427
+
+  if ! git -C "$GITSTORE" remote update origin
+  then
+    echo "== Fail to get git update =="
+    exit 3
+  fi
+
+  UPSTREAM=origin/master
+  LOCAL=$(git -C "$GITSTORE" rev-parse @)
+  REMOTE=$(git -C "$GITSTORE" rev-parse "$UPSTREAM")
+  BASE=$(git -C "$GITSTORE" merge-base @ "$UPSTREAM")
+
+  if [ "$LOCAL" = "$REMOTE" ]; then
+      echo "Up-to-date"
+  elif [ "$LOCAL" = "$BASE" ]; then
+      echo "Need to pull"
+      exit 3
+  elif [ "$REMOTE" = "$BASE" ]; then
+      echo "Need to push"
+      exit 3
+  else
+      echo "Diverged"
+      exit 3
+  fi
+}
+
 _tmpl_ca_json() {
   cat << EOF
 {
@@ -321,6 +350,12 @@ then
   echo "You need to init gopass and mount $STORE_NAME store first"
   exit 2
 fi
+
+_git_check
+
+echo "== Force gopass sync =="
+gopass sync -s "$STORE_NAME"
+
 
 readonly PEMLIST="ca-key.pem intermediate-ca-key.pem ca-certs.yaml"
 STORE_DIR="$STORE_NAME/$STORE_DIRECTORY"
