@@ -30,13 +30,14 @@ gopass_mount_alice_store() {
   git -C "$keystore_path" remote add origin "$fakeorigin_path/.git"
   git -C "$keystore_path" push --set-upstream origin master
 
-  echo "== mount $1 $2 =="
-  $GOPASS mounts mount --init 'alice@example.org' $1 "$2"
+  echo "== mount $store_name $temp_dir =="
+  $GOPASS mounts mount --init 'alice@example.org' "$store_name" "$temp_dir"
   $GOPASS mounts
 }
 
 gopass_unmount_alice_store() {
-  echo "== unmount $1 =="
-  $GOPASS mounts unmount $1
+  local store_name="$1"
+  echo "== unmount $store_name =="
+  $GOPASS mounts unmount "$store_name"
   $GOPASS mounts
 }

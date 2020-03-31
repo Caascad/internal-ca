@@ -4,6 +4,10 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 source $DIR/gopass-helper.sh
 
 readonly TMPDIR=$(mktemp -d)
+readonly GNUPGHOME=$(mktemp -d)
+
+# Use temp directory for gpg
+export GNUPGHOME
 
 set -eo pipefail
 
@@ -52,7 +56,7 @@ setup() {
   # use internal-ca file, ignore PATH
   shopt -u sourcepath
   gopass_create_alice_key
-  gopass_mount_alice_store $TESTSTORE $TMPDIR
+  gopass_mount_alice_store "$TESTSTORE" "$TMPDIR"
 }
 
 
@@ -61,7 +65,15 @@ setup() {
 #           #
 
 teardown() {
-  gopass_unmount_alice_store $TESTSTORE
+  gopass_unmount_alice_store "$TESTSTORE"
+
+  echo "== rm -r $GNUPGHOME =="
+  read -p "== Do you want to continue? [y/N]" -r
+  if [[ $REPLY =~ ^[Yy]$ ]]
+  then
+    echo "== yes remove $GNUPGHOME =="
+    rm -rf "$GNUPGHOME"
+  fi
 
   echo "== rm -r $TMPDIR =="
   read -p "== Do you want to continue? [y/N]" -r
