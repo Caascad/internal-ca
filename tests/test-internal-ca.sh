@@ -3,11 +3,12 @@
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 source $DIR/gopass-helper.sh
 
-readonly TMPDIR=$(mktemp -d)
-readonly GNUPGHOME=$(mktemp -d)
+readonly TMPDIR=$(mktemp -d -t tmp.XXXXXXXXXX)
+readonly GNUPGHOME=$(mktemp -d -t gpg.XXXXXXXXXX)
+readonly GOPASS_HOMEDIR=$(mktemp -d -t gopass.XXXXXXXXXX)
 
-# Use temp directory for gpg
 export GNUPGHOME
+export GOPASS_HOMEDIR
 
 set -eo pipefail
 
@@ -67,24 +68,9 @@ setup() {
 teardown() {
   gopass_unmount_alice_store "$TESTSTORE"
 
-  echo "== rm -r $GNUPGHOME =="
-  read -p "== Do you want to continue? [y/N]" -r
-  if [[ $REPLY =~ ^[Yy]$ ]]
-  then
-    echo "== yes remove $GNUPGHOME =="
-    rm -rf "$GNUPGHOME"
-  fi
-
-  echo "== rm -r $TMPDIR =="
-  read -p "== Do you want to continue? [y/N]" -r
-  if [[ $REPLY =~ ^[Yy]$ ]]
-  then
-    echo "== yes remove $TMPDIR =="
-    rm -rf "$TMPDIR"
-  fi
-
-  echo "== You can manually delete alice key =="
-  echo "== gpg --delete-secret-and-public-key 'alice@example.org' =="
+  rm -rf $GOPASS_HOMEDIR
+  rm -rf $GNUPGHOME
+  rm -rf $GOPASS_HOMEDIR
 }
 
 trap teardown EXIT
