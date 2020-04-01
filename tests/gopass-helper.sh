@@ -8,6 +8,10 @@ gopass_create_alice_key() {
   gpg --batch --passphrase '' --quick-gen-key 'alice@example.org' || true
 }
 
+gopass_init() {
+  echo "alice@example.org" > "$PASSWORD_STORE_DIR"/.gpg-id
+}
+
 # Create the gopass store with git
 # We create a fake git origin beacause internal-ca test if the origin is update.
 # 1:$TESTSTORE 2:$TMPDIR
@@ -31,7 +35,7 @@ gopass_mount_alice_store() {
   git -C "$keystore_path" push --set-upstream origin master
 
   echo "== mount $store_name $temp_dir =="
-  $GOPASS mounts mount --init 'alice@example.org' "$store_name" "$temp_dir"
+  $GOPASS mounts mount --init 'alice@example.org' "$store_name" "$keystore_path"
   $GOPASS mounts
 }
 

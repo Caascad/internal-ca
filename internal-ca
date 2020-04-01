@@ -131,15 +131,21 @@ publish() {
 
   git -C "$GITSTORE" add "$DEST"
   git -C "$GITSTORE" status
-  read -p "Do you want to continue? [y/N]" -r
+
+  _continue
+
+  git -C "$GITSTORE" commit -m "Add internal-ca csr for $ENVIRONMENT"
+  git -C "$GITSTORE" push
+}
+
+_continue() {
+  [ $BATCH -eq 1 ] && return 0
+  read -p "Do you want to continue? [y/N]" -n 1 -r
   if [[ ! $REPLY =~ ^[Yy]$ ]]
   then
       echo "no - exit"
       exit 1
   fi
-
-  git -C "$GITSTORE" commit -m "Add internal-ca csr for $ENVIRONMENT"
-  git -C "$GITSTORE" push
 }
 
 _unseal() {
@@ -179,12 +185,12 @@ renew() {
 }
 
 _git_check() {
-  echo "== Chech git repo is update $GITSTORE =="
+  echo "== Check git repo is updated $GITSTORE =="
   # https://stackoverflow.com/a/3278427
 
   if ! git -C "$GITSTORE" remote update origin
   then
-    echo "== Fail to get git update =="
+    echo "== Fail to update =="
     exit 3
   fi
 
@@ -286,11 +292,12 @@ _parsing() {
 
   case ${COMMAND} in
     generate | renew | publish | help )
-    ;;
+      ;;
     * )
-    echo "== Unkown command $COMMAND =="
-    help;
-    exit 1;;
+      echo "== Unkown command $COMMAND =="
+      help
+      exit 1
+      ;;
   esac
 
   shift
@@ -311,6 +318,9 @@ _parsing() {
       -n | --namespace )
         shift;
         NAMESPACE=$1
+        ;;
+      -y | --yes )
+        BATCH=1
         ;;
       -h | --help )
         help
@@ -337,6 +347,7 @@ _parsing() {
   if  [ -z "$STORE_DIRECTORY" ]; then STORE_DIRECTORY="internal-ca"; fi
 }
 
+BATCH=0
 _parsing  "$@"
 
 #
@@ -356,6 +367,9 @@ _git_check
 echo "== Force gopass sync =="
 gopass sync -s "$STORE_NAME"
 
+if [ $BATCH -eq 1 ]; then
+  gopass config --store "$STORE_NAME" noconfirm true
+fi
 
 readonly PEMLIST="ca-key.pem intermediate-ca-key.pem ca-certs.yaml"
 STORE_DIR="$STORE_NAME/$STORE_DIRECTORY"
