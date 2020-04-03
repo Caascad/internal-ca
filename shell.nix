@@ -11,6 +11,7 @@ let
 in
   pkgs.runCommand "deps" {
     buildInputs = with toolbox; [
-      gopass cfssl
+      gopass cfssl kubectl
+      pkgs.tree
     ];
   } ""

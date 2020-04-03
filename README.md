@@ -4,7 +4,7 @@ internal-ca
 The repo provides tools to provision a CA in cert-manager.
 
 The CA is generated with `cfssl`. Private keys are encrypted
-using gpg with the `gopass` tool in this repository.
+using `gpg` in a [gopass](https://github.com/gopasspw/gopass) keystore.
 
 The cert-manager CA allows the cluster users to issue certificates
 inside the cluster for their deployments.
@@ -73,22 +73,17 @@ Depending on your application you can handle it multiple ways:
 * modify the application to watch for files changes and react accordingly
   (for example, the go viper lib can do it:
   https://github.com/spf13/viper/commit/e0f7631cf3ac7e7530949c7e154855076b0a4c17)
-* run a sidecar that watches the files and sends a signal to the application to
-  reload certificates, see: https://git.corp.cloudwatt.com/jpbraun/file-watcher/
 * use the reloader controller to trigger rolling updates (https://github.com/stakater/Reloader)
 * ...
 
 # For operators
 
-Operator are in charge of provisioning `cert-manager` and the CA configuration
+Operators are in charge of provisioning `cert-manager` and the CA configuration
 in different clusters of the Caascad project.
-
-TODO: document gopass setup / usage
 
 ## Prerequisites
 
-Install `cfssl`, `gopass` from the
-[toolbox](https://github.com/Caascad/toolbox).
+A nix shell is provided to work with the project.
 
 ## Cert-manager install
 
@@ -140,27 +135,28 @@ kubectl apply -f ca-issuer.yaml
 
 ## Root CA and intermediate CA renewal
 
-The expiration date on theses CAs is high enough (14 years) to not need to renew them. 
+The expiration date on theses CAs is high enough (14 years) to not need to renew them.
 
-The keys are RSA 4086 bits so that the long expiry time should not be a problem per gouvernement recommendations (https://www.keylength.com/fr/5/)
+The keys are RSA 4086 bits so that the long expiry time should not be a problem
+per government recommendations (https://www.keylength.com/fr/5/)
 
 # Tests
 
 ## Automated tests
 
-We can tests all 3 commands with an automated script :
+We can tests all 3 commands with an automated script:
 
-``` bash
+```sh
 tests/test-internal-ca.sh
 ```
 
-This script will create a temporary directory with a gopass store. The store is
-initialized with a generated "alice" key and all gopass commands are tested with
+This script will create a temporary directory with a `gopass` store. The store is
+initialized with a generated `alice` key and all `gopass` commands are tested with
 this store.
 
 ## Manual tests
 
-To test the whole procedure, we can manually load and unload a temporary gopass
+To test the whole procedure, we can manually load and unload a temporary `gopass`
 store.
 
 ``` bash
